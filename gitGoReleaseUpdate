@@ -65,10 +65,10 @@ function gitClone()
   echoColor "${COLOR_MAGENTA}Releasing: ${COLOR_YELLOW}${DATA_TEMP_DIR}" 
   rm -rf ${DATA_TEMP_DIR}
 
-  echoColor "${COLOR_MAGENTA}Releasing: ${COLOR_YELLOW}${GIT_REPOSITORY_SRC_BRANCH}" 
-  u-git-release-update
-
+  echoColor "${COLOR_MAGENTA}Releasing: ${COLOR_YELLOW}${GIT_REPOSITORY_SRC_BRANCH}${COLOR_MAGENTA} from ${COLOR_YELLOW}${GIT_REPOSITORY_SRC}${COLOR_MAGENTA}::${COLOR_YELLOW}${GIT_REPOSITORY_SRC_BRANCH}" 
+  git commit -am "Releasing ${GIT_REPOSITORY_SRC_BRANCH} from ${GIT_REPOSITORY_SRC}::${GIT_REPOSITORY_SRC_BRANCH}"
   cd ${ROOT_DIR}
+  u-git-release-update
 }
 
 
