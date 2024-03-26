@@ -67,6 +67,7 @@ function gitClone()
   echo $(git commit -am "Releasing ${GIT_REPOSITORY_SRC_BRANCH} from ${GIT_REPOSITORY_SRC}::${GIT_REPOSITORY_SRC_BRANCH}" -q)&>/dev/null
   cd ${ROOT_DIR}
   echo $(u-git-release-update)&>/dev/null
+  rm -rf ${GIT_REPOSITORY_DST_DIR}/.git
   echoColor "${COLOR_GREEN}Finished" 
 }
 
