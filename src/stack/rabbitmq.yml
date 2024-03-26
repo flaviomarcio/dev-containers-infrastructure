@@ -1,0 +1,87 @@
+#ref
+# https://hub.docker.com/_/rabbitmq
+# https://www.rabbitmq.com/configure.html#config-file
+# https://imasters.com.br/devsecops/clusterizando-rabbitmq-com-docker-compose
+# https://github.com/micahhausler/rabbitmq-compose/blob/master/docker-compose.yml
+
+version: '3.9'
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    environment:
+      TZ: ${STACK_TZ}
+      RABBITMQ_ERLANG_COOKIE: SWQOKODSQALRPCLNMEQG
+      RABBITMQ_DEFAULT_USER: ${STACK_SERVICE_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${STACK_SERVICE_DEFAULT_PASS}
+      RABBITMQ_DEFAULT_VHOST: /
+      RABBITMQ_MAX_CONNECTIONS: 50
+      RABBITMQ_HEARTBEAT: 30
+      # RABBITMQ_CONFIG_FILE: /etc/rabbitmq/rabbitmq.con
+      # RABBITMQ_DEFAULT_PASS_FILE: 
+      # RABBITMQ_DEFAULT_USER_FILE: 
+      # RABBITMQ_MANAGEMENT_SSL_CACERTFILE: 
+      # RABBITMQ_MANAGEMENT_SSL_CERTFILE: 
+      # RABBITMQ_MANAGEMENT_SSL_DEPTH: 
+      # RABBITMQ_MANAGEMENT_SSL_FAIL_IF_NO_PEER_CERT: 
+      # RABBITMQ_MANAGEMENT_SSL_KEYFILE: 
+      # RABBITMQ_MANAGEMENT_SSL_VERIFY: 
+      # RABBITMQ_SSL_CACERTFILE: 
+      # RABBITMQ_SSL_CERTFILE: 
+      # RABBITMQ_SSL_DEPTH: 
+      # RABBITMQ_SSL_FAIL_IF_NO_PEER_CERT: 
+      # RABBITMQ_SSL_KEYFILE: 
+      # RABBITMQ_SSL_VERIFY: 
+      # RABBITMQ_VM_MEMORY_HIGH_WATERMARK: 
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/var/lib/rabbitmq
+    #   - "./enabled_plugins:/etc/rabbitmq/enabled_plugins"
+    #   - ${STACK_INFRA_CONF_DIR}/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+    # ports:
+    #   - target: 5672
+    #     protocol: tcp
+    #     published: 5672
+    #     mode: host
+    #   - target: 1883
+    #     protocol: tcp
+    #     published: 1883
+    #     mode: host
+    #   - target: 61613
+    #     protocol: tcp
+    #     published: 61613
+    #     mode: host
+    #   - target: 15672
+    #     protocol: tcp
+    #     published: 15672
+    #     mode: host
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=15672
+    networks:
+      - stack-nt

@@ -1,0 +1,84 @@
+auth_enabled: false
+
+#ref
+#   https://grafana.com/docs/loki/latest/configuration/examples/
+#   https://github.com/grafana/loki/issues/4699
+#   SWARM LOG
+#     https://github.com/grafana/loki/issues/4827 
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  #log_level: debug
+
+# common:
+#   instance_interface_names:
+#     - "lo"
+#   replication_factor: 1
+#   ring:
+#     instance_interface_names:
+#       - "lo"
+#     kvstore:
+#       store: inmemory
+
+ingester:
+  wal:
+    enabled: true
+    dir: /loki_data/wal
+  lifecycler:
+    address: 127.0.0.1
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
+    final_sleep: 0s
+  chunk_idle_period: 5m
+  chunk_retain_period: 30s
+  max_transfer_retries: 0
+
+schema_config:
+  configs:
+  - from: 2020-05-15
+    store: boltdb
+    object_store: filesystem
+    schema: v11
+    index:
+      prefix: index_
+      period: 168h
+
+storage_config:
+  boltdb:
+    directory: /loki_data/index
+
+  filesystem:
+    directory: /loki_data/chunks
+
+limits_config:
+  enforce_metric_name: false
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+
+compactor:
+  retention_enabled: true
+
+chunk_store_config:
+  max_look_back_period: 1h
+  chunk_cache_config:
+    enable_fifocache: true
+    fifocache:
+      max_size_bytes: 500MB
+query_range:
+  results_cache:
+    cache:
+      enable_fifocache: true
+      fifocache:
+        max_size_bytes: 500MB
+
+
+ruler:
+  alertmanager_url: http://${STACK_SERVICE_HOSTNAME_ALERTMANAGER}:9093
+
+querier:
+  query_timeout: 1h
+  max_concurrent: 15
+  engine:
+    timeout: 1h

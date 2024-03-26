@@ -1,0 +1,40 @@
+version: '3.9'
+
+#ref
+# https://gitlab.com/cyber5k/mistborn
+# https://hub.docker.com/r/cyber5k/mistborn
+# https://gitlab.com/cyber5k/mistborn/-/blob/master/base.yml
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+    
+services:
+  deb:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    environment:
+      TZ: ${STACK_TZ}
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.rule=HostSNI(`*`)
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.entryPoints=mysql
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.tcp.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=3306
+    networks:
+      - stack-nt

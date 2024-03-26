@@ -1,0 +1,47 @@
+#https://hub.docker.com/r/linuxserver/wikijs
+version: "3.9"
+
+#https://github.com/ruanbekker/docker-loki-distributed-minio/blob/main/docker-compose.yml
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    environment:
+      TZ: ${STACK_TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/data
+    # command:
+    #   - --loglevel warning
+    # ports:
+    #   - target: 6379
+    #     protocol: tcp
+    #     mode: ingress
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.rule=HostSNI(`*`)
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.entryPoints=redis
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.tcp.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=6379
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+    networks:
+      - stack-nt

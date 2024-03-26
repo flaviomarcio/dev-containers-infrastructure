@@ -1,0 +1,41 @@
+# gerado no container
+# dn: cn=admin,${STACK_LDAP_ROOT_DN}
+# changetype: modify
+# replace: o
+# o: Complete Organization Name
+
+dn: ou=people,${STACK_LDAP_ROOT_DN}
+changetype: add
+objectClass: organizationalUnit
+ou: people
+
+dn: uid=superadmin, ou=people,${STACK_LDAP_ROOT_DN}
+changetype: add
+objectClass: inetOrgPerson
+uid: superadmin
+cn: Super
+sn: Admin
+mail: ${STACK_SERVICE_DEFAULT_EMAIL}
+employeeNumber: 1
+
+dn: ou=groups,${STACK_LDAP_ROOT_DN}
+changetype: add
+objectClass: organizationalUnit
+ou: groups
+
+
+dn: cn=admin, ou=groups,${STACK_LDAP_ROOT_DN}
+changetype: add
+objectClass: groupofNames
+cn: admin
+ou: Admin Group
+member: uid=superadmin, ou=people,${STACK_LDAP_ROOT_DN}
+
+dn: uid=${STACK_SERVICE_DEFAULT_USER}, ou=people,${STACK_LDAP_ROOT_DN}
+changetype: add
+objectClass: inetOrgPerson
+uid: ${STACK_SERVICE_DEFAULT_USER}
+cn: ${STACK_SERVICE_DEFAULT_USER}
+sn: ${STACK_TARGET}
+mail: ${STACK_SERVICE_DEFAULT_MAIL}
+#employeeNumber: 2

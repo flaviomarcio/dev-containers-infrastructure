@@ -1,0 +1,4 @@
+FROM grafana/promtail:2.5.0
+LABEL maintainer "${STACK_ADMIN_USERNAME} <${STACK_ADMIN_EMAIL}>"
+
+ENV TZ=${STACK_TZ}

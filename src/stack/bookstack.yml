@@ -1,0 +1,99 @@
+version: '3.9'
+
+#ref
+#   user: admin@admin.com, password: password
+#   https://hub.docker.com/r/linuxserver/bookstack
+#   LDAP
+#     https://echowings.github.io/p/how-to-deploy-bookstack-with-docker-compose/
+
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+
+services:
+  db:
+    image: ${STACK_SERVICE_IMAGE_MYSQL}
+    hostname: ${STACK_SERVICE_HOSTNAME}-db
+    environment:
+      TZ: ${STACK_TZ}
+      PUID: 1000
+      PGID: 1000
+      MYSQL_ROOT_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      MYSQL_DATABASE: bookstack
+      MYSQL_USER: bookstack
+      MYSQL_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DB_DIR}:/config
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-security
+
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    environment:
+      TZ: ${STACK_TZ}
+      PUID: 1000
+      PGID: 1000
+      APP_ENV: ${STACK_ENVIRONMENT}
+      APP_URL: http://${STACK_SERVICE_HOSTNAME_PUBLIC}
+      DB_HOST: ${STACK_SERVICE_HOSTNAME}-db
+      DB_PORT: 3306
+      DB_USER: bookstack
+      DB_PASS: ${STACK_SERVICE_DEFAULT_PASS}
+      DB_DATABASE: bookstack
+
+      # - STORAGE_TYPE=local_secure
+      # - AUTH_METHOD=standard
+      # - APP_AUTO_LANG_PUBLIC=true
+      # - APP_VIEWS_BOOKS=grid
+      # - CACHE_DRIVER=file
+      # - SESSION_DRIVER=file
+      # - SESSION_LIFETIME=120
+      # - SESSION_COOKIE_NAME=book_session
+      # - SESSION_SECURE_COOKIE=false
+      # - CACHE_PREFIX=bookstack
+
+    volumes:
+      - ${STACK_SERVICE_STORAGE_CONFIG_DIR}:/config
+    # ports:
+    #   - 6875:80
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=80
+    networks:
+      - stack-nt
+      - stack-nt-security

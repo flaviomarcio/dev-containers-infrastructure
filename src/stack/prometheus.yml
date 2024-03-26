@@ -1,0 +1,52 @@
+#ref
+# https://github.com/prometheus/pushgateway
+# https://github.com/PagerTree/prometheus-grafana-alertmanager-example/tree/master/prometheus
+
+version: '3.9'
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    environment:
+      TZ: ${STACK_TZ}
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      #usado pelo o grafana tempo
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${STACK_INFRA_CONF_DIR}/prometheus/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ${STACK_INFRA_CONF_DIR}/prometheus/prometheus/alert.rules:/etc/prometheus/alert.rules
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/prometheus
+    # ports:
+    #   - 9090:9090
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=9000
+    networks:
+      - stack-nt

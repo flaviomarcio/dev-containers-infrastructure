@@ -1,0 +1,92 @@
+#ref
+# https://hub.docker.com/r/linuxserver/wikijs
+# https://docs.requarks.io/install/docker
+version: "3.9"
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+
+services:
+
+  db:
+    image: ${STACK_SERVICE_IMAGE_POSTGRES}
+    hostname: ${STACK_SERVICE_HOSTNAME}-db
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "wikijs", "-U", "wikijs"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DB_DIR}:/postgresql/pg/data
+    environment:
+      TZ: ${STACK_TZ}
+      POSTGRES_USER: wikijs
+      POSTGRES_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      PGDATA: /postgresql/pg/data
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-security
+
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    depends_on:
+      - db
+    volumes:
+      - ${STACK_SERVICE_STORAGE_CONFIG_DIR}:/config
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/data
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: ${STACK_TZ}
+      DB_TYPE: postgres
+      DB_HOST: ${STACK_SERVICE_HOSTNAME}-db
+      DB_PORT: 5432
+      DB_USER: wikijs
+      DB_PASS: ${STACK_SERVICE_DEFAULT_PASS}
+      DB_NAME: wikijs
+      ADMIN_USERNAME: ${STACK_ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${STACK_ADMIN_PASSWORD}
+    # ports:
+    #   - target: 3000
+    #     protocol: tcp
+    #     mode: ingress
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=3000
+    networks:
+      - stack-nt
+      - stack-nt-security

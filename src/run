@@ -1,0 +1,28 @@
+#!/bin/bash
+
+export ROOT_DIR=${PWD}
+export ROOT_BIN_DIR=${ROOT_DIR}/bin
+export BASH_BIN=${PWD}/bash-bin
+
+if [[ $(which u-env) != "" ]]; then
+  echo $(u-env Person)>&/dev/null
+fi
+cd ${ROOT_BIN_DIR}
+
+export __public_target=
+export __public_environment=
+if [[ ${QT_VERSION} == "" ]]; then
+  export QT_VERSION=6.5.1
+fi
+if [[ ${STACK_TARGET} != "" ]]; then
+  export __public_target=${STACK_TARGET}
+fi
+if [[ ${STACK_ENVIRONMENT} != "" ]]; then
+  export __public_environment=${STACK_ENVIRONMENT}
+fi
+
+export STACK_ENVIRONMENT=
+export STACK_TARGET=
+
+chmod +x ${ROOT_BIN_DIR}/runner.sh
+${ROOT_BIN_DIR}/runner.sh "$@"

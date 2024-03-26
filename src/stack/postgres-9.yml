@@ -1,0 +1,52 @@
+version: '3.9'
+
+#ref
+#   https://hub.docker.com/_/postgres
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    volumes:
+      #- ${STACK_INFRA_CONF_DIR}/postgres/initdb.sql:/docker-entrypoint-initdb.d
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/postgresql/pg/data
+    environment:
+      TZ: ${STACK_TZ}
+      POSTGRES_USER: ${STACK_SERVICE_DEFAULT_USER}
+      POSTGRES_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      PGDATA: /postgresql/pg/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "${STACK_SERVICE_DEFAULT_DATABASE}", "-U", "${STACK_SERVICE_DEFAULT_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.rule=HostSNI(`*`)
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.entryPoints=postgres
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.tcp.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=5432
+    networks:
+      - stack-nt

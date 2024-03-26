@@ -1,0 +1,13 @@
+#!/bin/bash
+
+apt update
+apt install -y sudo telnet curl iputils-ping tar mcedit htop iproute2 wget bash-completion postgresql-client postgresql-common
+
+#MYSQL INSTALLER
+DEB_FILE=/tmp/mysql-shell.deb
+DEB_URI=https://cdn.mysql.com//Downloads/MySQL-Shell/mysql-shell_8.0.32-1debian11_amd64.deb
+rm -rf ${DEB_FILE}
+wget -O ${DEB_FILE} ${DEB_URI}
+dpkg -i ${DEB_FILE}
+apt --fix-broken install -y
+apt list --upgradable

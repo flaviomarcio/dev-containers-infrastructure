@@ -1,0 +1,12 @@
+[app.notification]
+# Helpful to indicate the origin of the message. Default to HOSTNAME.
+# origin = "custom-origin"
+
+# Optional Jinja2 custom template to print message to GChat.
+# custom_template_path = "<file>.json.j2"
+
+# Optional true to send the message as a Gchat card
+# use_cards = true
+
+[app.room.test]
+    notification_url = "https://chat.googleapis.com/v1/spaces/AAAAbsDTGv4/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=cfNyCdIlnt1qi56G2498VHiGAz4s8yaqEIVZUK8-SIc%3D"

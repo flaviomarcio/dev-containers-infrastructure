@@ -1,0 +1,58 @@
+version: '3.9'
+
+#ref
+# https://docs.docker.com/registry/deploying/
+# https://docs.docker.com/engine/swarm/stack-deploy/
+# https://github.com/maxmasetti/docker-compose-registry/blob/master/docker-compose.yml
+# https://www.baeldung.com/linux/docker-compose-private-repositories
+# https://docs.portainer.io/admin/registries/add
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_REGISTRY}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    environment:
+      TZ: ${STACK_TZ}
+      REGISTRY_HTTP_RELATIVEURLS: "true"
+      # REGISTRY_HTTP_ADDR: "0.0.0.0:80"
+      # REGISTRY_HTTP_TLS_CERTIFICATE: /certs/domain.crt
+      # REGISTRY_HTTP_TLS_KEY: /certs/domain.key
+      # REGISTRY_AUTH: htpasswd
+      # REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
+      # REGISTRY_AUTH_HTPASSWD_REALM: Registry Realm
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/var/lib/registry
+      #- ${STACK_INFRA_CONF_DIR}/registry/config.yml:/etc/docker/registry/config.yml
+    # ports:
+    #   - target: 5000
+    #     protocol: tcp
+    #     published: 5000
+    #     mode: host
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.rule=HostSNI(`*`)
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.entryPoints=registry
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.tcp.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=5000
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+    networks:
+      - stack-nt

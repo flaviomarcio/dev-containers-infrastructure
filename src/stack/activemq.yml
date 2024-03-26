@@ -1,0 +1,57 @@
+version: '3.9'
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    #command:
+    #  - -Dconfig=xbean:file:/opt/activemq/conf/activemq.xml
+    environment:
+      TZ: ${STACK_TZ}
+      ACTIVEMQ_DISALLOW_WEBCONSOLE: "false"
+      ACTIVEMQ_USERNAME: ${STACK_SERVICE_DEFAULT_USER}
+      ACTIVEMQ_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      ACTIVEMQ_WEBADMIN_USERNAME: ${STACK_SERVICE_DEFAULT_USER}
+      ACTIVEMQ_WEBADMIN_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${STACK_INFRA_CONF_DIR}/activemq/entrypoint.sh:/entrypoint.sh
+      #- ${STACK_INFRA_CONF_DIR}/activemq/activemq.xml:/opt/activemq/conf/activemq.xml
+      #- ${STORAGE_ACTIVEMQ}:/opt/activemq/data
+    # entrypoint: ["/entrypoint.sh"]
+    # ports:
+    #   - target: 61616
+    #     published: 61616
+    #     mode: ingress
+    #   - target: 8161
+    #     published: 8161
+    #     mode: ingress
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.rule=HostSNI(`*`)
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.entryPoints=activemq
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.tcp.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=61616
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+    networks:
+      - stack-nt
+    

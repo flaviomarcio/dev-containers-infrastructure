@@ -1,0 +1,14 @@
+<spi name="ldap">
+    <provider name="default" enabled="true">
+        <properties>
+            <property name="bindDn" value="cn=admin,${STACK_LDAP_DN}"/>
+            <property name="bindCredential" value="${STACK_SERVICE_DEFAULT_PASS}"/>
+            <property name="baseDn" value="${STACK_LDAP_DN}"/>
+            <property name="baseCtxDN" value="${STACK_LDAP_DN}"/>
+            <property name="ldapURL" value="ldap://int-ldap:389"/>
+            <property name="connectionPooling" value="true"/>
+            <property name="pagination" value="true"/>
+            <!-- Outras propriedades de configuração do LDAP -->
+        </properties>
+    </provider>
+</spi>

@@ -1,0 +1,7 @@
+#!/bin/bash
+echo $(source ./gitGo)$>/dev/null
+git submodule update --init -q
+git submodule foreach ./gitInit -q
+echo $(source ./gitGo)$>/dev/null
+git checkout $(cat ./git-branch-release.txt) -q
+git pull origin $(git branch --show-current) -q

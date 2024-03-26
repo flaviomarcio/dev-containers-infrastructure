@@ -1,0 +1,87 @@
+version: '3.9'
+
+#ref
+# https://grafana.com/docs/k6/latest/get-started/installation/
+# https://grafana.com/docs/k6/latest/extensions/
+# https://docs.influxdata.com/influxdb/v2/install/upgrade/v1-to-v2/docker/
+
+networks:
+  stack-nt-grf-k6:
+    name: ${STACK_NETWORK_GRAFANA_K6}
+    external: true
+
+services:
+  db:
+    image: ${STACK_SERVICE_IMAGE_INFLUXDB}
+    hostname: "${STACK_SERVICE_HOSTNAME}-db"
+    # ports:
+    #   - "8086:8086"
+    environment:
+      TZ: ${STACK_TZ}
+      # ref
+      #   https://docs.influxdata.com/influxdb/v2/install/upgrade/v1-to-v2/docker/
+      INFLUXDB_DB: k6
+      DOCKER_INFLUXDB_INIT_RETENTION: 1d
+    command: 
+      - --storage-wal-fsync-delay=1m
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/var/lib/influxdb2
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-grf-k6
+
+  # ui:
+  #   image: grafana/k6:master-with-browser
+  #   hostname: "${STACK_SERVICE_HOSTNAME}-ui"
+  #   deploy:
+  #     mode: global
+  #     placement:
+  #       constraints:
+  #         - ${APPLICATION_DEPLOY_NODE_TOOL}
+  #     resources:
+  #       limits:
+  #         cpus: "${APPLICATION_DEPLOY_CPU}"
+  #         memory: ${APPLICATION_DEPLOY_MEMORY}
+  #     restart_policy:
+  #       condition: any
+  #   networks:
+  #     - stack-nt-grf-k6
+
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    environment:
+      TZ: ${STACK_TZ}
+      K6_OUT: http://${STACK_SERVICE_HOSTNAME}-db:8086/k6
+    #   - ENDPOINT=${STACK_PREFIX}-grafana-tempo:4317
+    # volumes:
+    #   - ./scripts:/scripts
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-grf-k6

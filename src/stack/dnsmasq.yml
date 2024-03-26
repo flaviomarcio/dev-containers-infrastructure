@@ -1,0 +1,41 @@
+version: '3.9'
+
+#ref
+#   https://hub.docker.com/r/dockurr/dnsmasq
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_DNSMASQ}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    cap_add:
+      - NET_ADMIN
+    environment:
+      TZ: ${STACK_TZ}
+      DNS1: "1.0.0.1"
+      DNS2: "1.1.1.1"
+    ports:
+      - 53:53/udp
+      - 53:53/tcp
+    volumes:
+      - ${STACK_INFRA_CONF_DIR}/dnsmasq/dnsmasq.conf:/etc/dnsmasq.conf
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt

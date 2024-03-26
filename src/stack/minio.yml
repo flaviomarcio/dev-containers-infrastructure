@@ -1,0 +1,59 @@
+version: '3.9'
+
+#ref
+#   https://github.com/bitnami/containers/tree/main/bitnami/minio
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+    
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    environment:
+      TZ: ${STACK_TZ}
+      MINIO_SCHEME: http
+      MINIO_ROOT_USER: ${STACK_SERVICE_DEFAULT_USER}
+      MINIO_ROOT_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      MINIO_DEFAULT_BUCKETS: default:policy,vault,rabbitmq
+
+      # MINIO_SERVER_HOST: "minio-server" \
+      # MINIO_SERVER_ACCESS_KEY: minio-access-key
+      # MINIO_SERVER_SECRET_KEY: minio-secret-key
+    # ports:
+    #   - target: 9000
+    #     protocol: tcp
+    #     published: 9000
+    #   - target: 9001
+    #     published: 9001
+    #     protocol: tcp
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/bitnami/minio/data
+      #- /path/to/certs:/certs \
+
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=9001
+    networks:
+      - stack-nt

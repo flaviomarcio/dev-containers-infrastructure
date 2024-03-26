@@ -1,0 +1,109 @@
+version: '3.9'
+
+#ref
+# https://docs.gocd.org/current/faq/dev_use_current_revision_in_build.html
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+
+services:
+  agent:
+    user: "1000"
+    #image: ${STACK_SERVICE_IMAGE_URL}
+    image: gocd/gocd-agent-debian-12:v23.5.0
+    #hostname: ${STACK_SERVICE_HOSTNAME}-agent
+    depends_on:
+      - server
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${STACK_INFRA_CONF_DIR}/gocd/ssh:/home/go/.ssh
+
+      #- "./go/agent/data/godata:/godata"
+      #- "./go/agent/data/home-go-dir:/home/go"
+
+      #- ${STACK_INFRA_CONF_DIR}/gocd/autoregister.properties:var/lib/go-agent/config/autoregister.properties
+    environment:
+      TZ: ${STACK_TZ}
+
+      GO_SERVER_URL: http://${STACK_SERVICE_HOSTNAME}:8153/go
+      GO_ENVIRONMENT_NAME: ${STACK_ENVIRONMENT}
+      AGENT_BOOTSTRAPPER_ARGS: '-sslVerificationMode NONE '
+      #GO_PIPELINE_NAME: main
+      #GO_PIPELINE_COUNTER:
+      #GO_PIPELINE_LABEL:
+      #GO_STAGE_NAME: development
+      #GO_STAGE_COUNTER: 1
+      #GO_JOB_NAME:
+      #GO_TRIGGER_USER:
+      
+      #AGENT_AUTO_REGISTER_KEY: 099dc57cc1f1c30a8a72e873dc3916e5
+      AGENT_AUTO_REGISTER_RESOURCES: ant,java,gradle
+      AGENT_AUTO_REGISTER_ENVIRONMENTS: Integration
+      #AGENT_AUTO_REGISTER_HOSTNAME: ...
+      #AGENT_AUTO_REGISTER_KEY: ${STACK_GOCD_REGISTER_KEY}
+    deploy:
+      mode: replicated
+      replicas: 2
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_BUILD}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-security
+
+  srv:
+    user: "1000"
+    #image: ${STACK_SERVICE_IMAGE_URL}
+    image: gocd/gocd-server:v23.5.0
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    environment:
+      TZ: ${STACK_TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${STACK_INFRA_CONF_DIR}/gocd/ssh:/home/go/.ssh
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/godata
+      - ${STACK_INFRA_CONF_DIR}/gocd/cruise-config.xml:/var/lib/go-agent/config/cruise-config.xml
+    # environment:
+    #   #ref
+    #   # https://docs.gocd.org/current/advanced_usage/config_repo.html
+    #   CONFIG_GIT_REPO: ${STACK_GOCD_GIT_REPOSITORY}
+    #   CONFIG_GIT_BRANCH: ${STACK_GOCD_GIT_BRANCH}
+    #   CONFIG_GIT_REPO: https://gocd_user:<password_or_auth_token>/config.git
+    #   CONFIG_GIT_BRANCH: branch_with_config
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=8153
+    networks:
+      - stack-nt
+      - stack-nt-security
