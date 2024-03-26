@@ -66,8 +66,9 @@ function gitClone()
   echoColor "${COLOR_MAGENTA}Releasing: ${COLOR_YELLOW}${GIT_REPOSITORY_SRC_BRANCH}${COLOR_MAGENTA} from ${COLOR_YELLOW}${GIT_REPOSITORY_SRC}${COLOR_MAGENTA}::${COLOR_YELLOW}${GIT_REPOSITORY_SRC_BRANCH}" 
   echo $(git commit -am "Releasing ${GIT_REPOSITORY_SRC_BRANCH} from ${GIT_REPOSITORY_SRC}::${GIT_REPOSITORY_SRC_BRANCH}" -q)&>/dev/null
   cd ${ROOT_DIR}
+  rm -rf ${GIT_REPOSITORY_DST_DIR}/.gitignore
+  rm -rf ${GIT_REPOSITORY_DST_DIR}/.gitmodules
   echo $(u-git-release-update)&>/dev/null
-  rm -rf ${GIT_REPOSITORY_DST_DIR}/.git
   echoColor "${COLOR_GREEN}Finished" 
 }
 
