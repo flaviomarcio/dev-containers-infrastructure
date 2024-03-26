@@ -1,0 +1,62 @@
+version: '3.9'
+   
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+  stack-nt-sre:
+    name: ${STACK_NETWORK_SRE}
+    external: true
+  stack-nt-grf-loki:
+    name: ${STACK_NETWORK_GRAFANA_LOKI}
+    external: true
+  stack-nt-grf-tempo:
+    name: ${STACK_NETWORK_GRAFANA_TEMPO}
+    external: true
+  stack-nt-grf-k6:
+    name: ${STACK_NETWORK_GRAFANA_K6}
+    external: true
+  stack-nt-kong:
+    name: ${STACK_NETWORK_KONG}
+    external: true
+
+services:
+  deb:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    user: "root"
+    environment:
+      TZ: ${STACK_TZ}
+    volumes:
+      - ${HOME}:/host-home:rw
+    entrypoint: ["sleep", "infinity"]
+    # logging:
+    #   driver: loki
+    #   options:
+    #     loki-url: ${STACK_LOKI_URL_PUSH}
+    #     loki-external-labels: ${STACK_LOG_LOKI_LABELS}
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt
+      - stack-nt-security
+      - stack-nt-sre
+      - stack-nt-grf-loki
+      - stack-nt-grf-tempo
+      - stack-nt-grf-k6
+      - stack-nt-kong

@@ -1,0 +1,41 @@
+version: '3.9'
+
+#ref
+# https://github.com/prometheus/pushgateway
+# https://github.com/PagerTree/prometheus-grafana-alertmanager-example/tree/master/prometheus
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    # ports:
+    #   - target: 6000
+    #     protocol: tcp
+    #     mode: ingress
+    environment:
+      TZ: ${STACK_TZ}
+    command:
+      - "--config=/etc/calert/config.toml"
+    volumes:
+      - ${STACK_INFRA_CONF_DIR}/prometheus/alert-manager-calert/config.toml:/etc/calert/config.toml
+      - ${STACK_INFRA_CONF_DIR}/prometheus/alert-manager-calert/message.tmpl:/etc/calert/message.tmpl
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt

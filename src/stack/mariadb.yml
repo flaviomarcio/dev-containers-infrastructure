@@ -1,0 +1,47 @@
+version: '3.9'
+
+#ref
+#   https://fernandezmejias.medium.com/adding-postgrsql-and-pgadmin-as-services-in-traefik-2-x-d0c2646b1413
+#   https://dev.to/kanzitelli/deploying-postgresql-and-redis-behind-traefik-in-the-cloud-5an2
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_MYSQL}
+    hostname: ${STACK_SERVICE_HOSTNAME}-db
+    environment:
+      TZ: ${STACK_TZ}
+      PUID: 1000
+      PGID: 1000
+      MYSQL_ROOT_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      MYSQL_DATABASE: ${STACK_SERVICE_DEFAULT_DATABASE}
+      MYSQL_USER: ${STACK_SERVICE_DEFAULT_USER}
+      MYSQL_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DB_DIR}:/config
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.rule=HostSNI(`*`)
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.entryPoints=mysql
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.tcp.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=3306
+    networks:
+      - stack-nt-security

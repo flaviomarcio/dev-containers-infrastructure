@@ -1,0 +1,76 @@
+version: '3.9'
+
+#ref
+#   https://github.com/portainer/portainer-compose/blob/master/docker-stack.yml
+#   https://github.com/benderstwin/Portainer-Templates
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  agent:
+    image: portainer/agent:2.19.4
+    hostname: "${STACK_SERVICE_HOSTNAME}-agent" 
+    environment:
+      TZ: ${STACK_TZ}
+      AGENT_CLUSTER_ADDR: tasks.${STACK_SERVICE_HOSTNAME}-agent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+    deploy:
+      mode: replicated
+      replicas: 2
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt
+      
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    volumes:
+      # - /var/run/docker.sock:/var/run/docker.sock
+      #- /var/lib/docker/volumes:/var/lib/docker/volumes
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/data
+    environment:
+      TZ: ${STACK_TZ}
+      ADMIN_USERNAME: ${STACK_SERVICE_DEFAULT_USER}
+      ADMIN_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+    command: -H tcp://tasks.agent:9001 --tlsskipverify
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=9000
+    networks:
+      - stack-nt
+
+    

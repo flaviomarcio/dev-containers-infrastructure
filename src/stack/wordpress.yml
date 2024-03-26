@@ -1,0 +1,88 @@
+version: '3.9'
+
+#ref
+#   https://hub.docker.com/_/wordpress
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+
+services:
+  db:
+    image: ${STACK_SERVICE_IMAGE_MYSQL}
+    hostname: ${STACK_SERVICE_HOSTNAME}-db
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 3
+      timeout: 5s
+    environment:
+      TZ: ${STACK_TZ}
+      MYSQL_DATABASE: wordpress_db
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      MYSQL_RANDOM_ROOT_PASSWORD: '${STACK_SERVICE_DEFAULT_TOKEN}'
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DB_DIR}:/var/lib/mysql
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-security
+
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 10s
+      retries: 3
+      timeout: 5s
+    environment:
+      TZ: ${STACK_TZ}
+      WORDPRESS_DB_HOST: ${STACK_SERVICE_HOSTNAME}-db
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      WORDPRESS_DB_NAME: wordpress_db
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/var/www/html
+    # ports:
+    #   - 8080:80
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https      
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=80
+    networks:
+      - stack-nt
+      - stack-nt-security

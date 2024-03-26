@@ -1,0 +1,46 @@
+version: '3.9'
+
+#ref
+# https://github.com/prometheus/pushgateway
+# https://github.com/PagerTree/prometheus-grafana-alertmanager-example/tree/master/prometheus
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    environment:
+      TZ: ${STACK_TZ}
+
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command: 
+      - '--path.procfs=/host/proc' 
+      - '--path.sysfs=/host/sys'
+      - --collector.filesystem.ignored-mount-points
+      - "^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)"
+    # ports:
+    #   - target: 9100
+    #     protocol: tcp
+    #     mode: ingress
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt

@@ -1,0 +1,155 @@
+version: '3.9'
+# https://www.youtube.com/@secure_itpoc
+
+#ref
+#   - osixia
+#     - https://hub.docker.com/r/osixia/openldap
+#       - https://gist.github.com/thomasdarimont/d22a616a74b45964106461efb948df9c
+#     - https://hub.docker.com/r/osixia/phpldapadmin
+#       - https://github.com/osixia/docker-phpLDAPadmin#advanced-user-guide
+#     - https://github.com/osixia/docker-openldap
+#     - https://github.com/osixia/docker-openldap-backup
+#   - LDAPUtils
+#     - https://wiki.debian.org/LDAP/LDAPUtils
+#ref
+#   - https://hub.docker.com/r/bitnami/openldap
+#       - https://github.com/bitnami/containers/tree/main/bitnami/openldap
+#       - https://github.com/bitnami/containers/blob/main/bitnami/openldap/docker-compose.yml
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+
+services:
+  srv:
+    image: osixia/openldap
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    environment:
+      TZ: ${STACK_TZ}
+
+      STACK_LDAP_DOMAIN: "${STACK_LDAP_DOMAIN}"
+      STACK_LDAP_ROOT_DN: "cn=admin,${STACK_LDAP_ROOT_DN}"
+
+      # LDAP_OPENLDAP_GID: 1234 # this should output uid=2345(openldap) gid=1234(openldap) groups=1234(openldap)
+      # LDAP_OPENLDAP_UID: 2345 # this should output uid=2345(openldap) gid=1234(openldap) groups=1234(openldap)
+
+      LDAP_LOG_LEVEL: "256"
+      LDAP_ORGANISATION: "${STACK_TARGET}" 
+      LDAP_DOMAIN: "${STACK_LDAP_DOMAIN}"
+      #LDAP_BASE_DN: ""
+      LDAP_ADMIN_PASSWORD: "${STACK_SERVICE_DEFAULT_PASS}"
+      LDAP_CONFIG_PASSWORD: "${STACK_SERVICE_DEFAULT_PASS}"
+      LDAP_READONLY_USER: "false"
+      #LDAP_READONLY_USER_USERNAME: "readonly"
+      #LDAP_READONLY_USER_PASSWORD: "readonly"
+      LDAP_RFC2307BIS_SCHEMA: "false"
+      LDAP_BACKEND: "mdb"
+      LDAP_TLS: "false"
+      #LDAP_TLS_CRT_FILENAME: "cert.crt"
+      #LDAP_TLS_KEY_FILENAME: "cert.key"
+      #LDAP_TLS_DH_PARAM_FILENAME: "dhparam.pem"
+      #LDAP_TLS_CA_CRT_FILENAME: "ca.crt"
+      #LDAP_TLS_ENFORCE: "false"
+      #LDAP_TLS_CIPHER_SUITE: "SECURE256:-VERS-SSL3.0"
+      #LDAP_TLS_VERIFY_CLIENT: "demand"
+      LDAP_REPLICATION: "false"
+      #LDAP_REPLICATION_CONFIG_SYNCPROV: 'binddn="cn=admin,cn=config" bindmethod=simple credentials="$$LDAP_CONFIG_PASSWORD" searchbase="cn=config" type=refreshAndPersist retry="60 +" timeout=1 starttls=critical'
+      #LDAP_REPLICATION_DB_SYNCPROV: 'binddn="cn=admin,$$LDAP_BASE_DN" bindmethod=simple credentials="$$LDAP_ADMIN_PASSWORD" searchbase="$$LDAP_BASE_DN" type=refreshAndPersist interval=00:00:00:10 retry="60 +" timeout=1 starttls=critical'
+      #LDAP_REPLICATION_HOSTS: "#PYTHON2BASH:['ldap://ldap.example.org','ldap://ldap2.example.org']"
+      KEEP_EXISTING_CONFIG: "false"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "false"
+      LDAP_SSL_HELPER_PREFIX: "ldap"
+    # tty: true
+    # stdin_open: true
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/var/lib/ldap
+      - ${STACK_SERVICE_STORAGE_CONFIG_DIR}:/etc/ldap/slapd.d
+    #  - ${STACK_INFRA_CONF_DIR}/ldap/cert:/container/service/slapd/assets/certs
+      - ${STACK_INFRA_CONF_DIR}/ldap/admin.ldif:/container/service/slapd/assets/config/bootstrap/ldif/admin.ldif
+    command: "/bin/sh -c '/container/tool/run --copy-service --loglevel debug'"
+    # ports:
+    #   - "389:389"
+    #   - "636:636"
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-security
+
+  # backup:
+  #   image: osixia/openldap-backup:latest
+  #   depends_on:
+  #     - srv
+  #   container_name: ldap-backup
+  #   environment:
+  #     - LDAP_BACKUP_CONFIG_CRON_EXP=0 2 * * *
+  #     - LDAP_BACKUP_DATA_CRON_EXP=0 3 * * *
+  #     - LDAP_BACKUP_INTERVAL=1d
+  #     - LDAP_BACKUP_NUM_KEEP=7
+  #     - LDAP_BACKUP_CONFIG_NUM_KEEP=7
+  #     - LDAP_BACKUP_DATA_NUM_KEEP=7
+  #     - LDAP_BACKUP_CONFIG_PATH=/ldap-backup/config
+  #     - LDAP_BACKUP_DATA_PATH=/ldap-backup/data
+  #     - LDAP_BACKUP_CONFIG_TASK_MAX_ELAPSED_TIME=30
+  #     - LDAP_BACKUP_DATA_TASK_MAX_ELAPSED_TIME=120
+  #   volumes:
+  #     - ldap-backup-config:/ldap-backup/config
+  #     - ldap-backup-data:/ldap-backup/data
+  #     - ./backup_scripts:/container/service/backup/assets/backup_scripts
+  #   deploy:
+  #     mode: global
+  #     placement:
+  #       constraints:
+  #         - ${APPLICATION_DEPLOY_NODE_TOOL}
+  #     resources:
+  #       limits:
+  #         cpus: "${APPLICATION_DEPLOY_CPU}"
+  #         memory: ${APPLICATION_DEPLOY_MEMORY}
+  #     update_config:
+  #       parallelism: 1
+  #       delay: 10s
+  #     restart_policy:
+  #       condition: any
+  #   networks:
+  #     - stack-nt-security
+
+  # adm:
+  #   image: osixia/phpldapadmin:latest
+  #   environment:
+  #     PHPLDAPADMIN_LDAP_HOSTS: "${STACK_SERVICE_HOSTNAME}"
+  #     PHPLDAPADMIN_HTTPS: "false"
+  #   ports:
+  #     - "9444:80"
+  #   depends_on:
+  #     - srv
+  #   deploy:
+  #     mode: global
+  #     placement:
+  #       constraints:
+  #         - ${APPLICATION_DEPLOY_NODE_TOOL}
+  #     resources:
+  #       limits:
+  #         cpus: "${APPLICATION_DEPLOY_CPU}"
+  #         memory: ${APPLICATION_DEPLOY_MEMORY}
+  #     update_config:
+  #       parallelism: 1
+  #       delay: 10s
+  #     restart_policy:
+  #       condition: any
+  #   networks:
+  #     - stack-nt-security

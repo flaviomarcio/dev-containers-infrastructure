@@ -1,0 +1,61 @@
+version: '3.9'
+
+#ref
+# https://hub.docker.com/r/gvenzl/oracle-xe
+# https://hub.docker.com/r/gvenzl/oracle-free
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+volumes:
+  oracle-data:
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./init/oracle:/docker-entrypoint-initdb.d
+    environment:
+      TZ: ${STACK_TZ}
+      ORACLE_ALLOW_REMOTE: "true"
+      ORACLE_DISABLE_APEX: "true"
+      ORACLE_DISABLE_DEFAULT_ACCOUNTS: "true"
+      ORACLE_CHARACTERSET: AL32UTF8
+      ORACLE_COLLATION: CL8UTF8
+      ORACLE_SYS_PASSWORD: {STACK_SERVICE_DEFAULT_PASS}
+      ORACLE_PWD: ${STACK_SERVICE_DEFAULT_PASS}
+      ORACLE_DATABASE: ${STACK_SERVICE_DEFAULT_DATABASE}
+    # ports:
+    #   - target: 1521
+    #     published: 1521
+    #     protocol: tcp
+    #     mode: host
+    #   - target: 8080
+    #     published: 15210
+    #     protocol: tcp
+    #     mode: host
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    # options: >-
+    #   --health-cmd healthcheck.sh
+    #   --health-interval 10s
+    #   --health-timeout 5s
+    #   --health-retries 10
+    networks:
+      - stack-nt

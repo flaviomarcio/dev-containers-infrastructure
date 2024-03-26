@@ -1,0 +1,128 @@
+version: '3'
+
+#ref
+# https://hub.docker.com/r/bitnami/sonarqube
+# https://hub.docker.com/r/bitnami/sonarqube#configuration
+# https://github.com/mtnzorro/bitnami-docker-sonarqube/blob/master/docker-compose.yml
+# https://github.com/bitnami/charts/blob/main/bitnami/sonarqube/README.md
+# https://github.com/SonarSource/helm-chart-sonarqube/tree/master/charts/sonarqube
+# https://appinventiv.com/blog/run-sonarqube-with-docker-compose/
+# https://docs.sonarsource.com/sonarqube/latest/setup-and-upgrade/configure-and-operate-a-server/environment-variables/
+# https://docs.sonarsource.com/sonarqube/latest/setup-and-upgrade/install-the-server/advanced-installation-features/
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+
+services:
+  db:
+    image: ${STACK_SERVICE_IMAGE_POSTGRES}
+    hostname: ${STACK_SERVICE_HOSTNAME}-db
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DB_DIR}:/postgresql/pg/data
+    environment: 
+      TZ: ${STACK_TZ}
+      POSTGRES_USER: ${STACK_SERVICE_DEFAULT_USER}
+      POSTGRES_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      PGDATA: /postgresql/pg/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "${STACK_SERVICE_DEFAULT_DATABASE}", "-U", "${STACK_SERVICE_DEFAULT_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-security
+
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    depends_on:
+      - db
+    environment:
+      SONAR_CE_JAVAADDITIONALOPTS: "-javaagent:/opt/bitnami/sonarqube/extensions/plugins/sonarqube-community-branch-plugin-1.18.0.jar=ce"
+      #SONARQUBE_WEB_JAVA_ADD_OPTS: "-javaagent:/opt/bitnami/sonarqube/extensions/plugins/sonarqube-community-branch-plugin-1.18.0.jar=web"
+      # SONAR_LOG_MAXFILES: 7
+      # SONAR_LOG_LEVEL: INFO
+      # # Global level of logs (applies to all 4 processes). Supported values are INFO (default), DEBUG and TRACE
+      # # SONAR_LOG_LEVEL_APP: INFO
+      # # SONAR_LOG_LEVEL_WEB: INFO
+      # # SONAR_LOG_LEVEL_CE: INFO
+      # # SONAR_LOG_LEVEL_ES: INFO
+      # SONAR_WEB_HTTP_MAXTHREADS: 10
+      # SONAR_WEB_HTTP_ACCEPTCOUNT: 10
+      # SONARQUBE_PORT_NUMBER: 9000
+      # SONARQUBE_WEB_CONTEXT:
+      # SONARQUBE_USERNAME: ${STACK_SERVICE_DEFAULT_USER}
+      # SONARQUBE_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      # SONARQUBE_EMAIL: ${STACK_SERVICE_DEFAULT_EMAIL}
+      #ALLOW_EMPTY_PASSWORD: "yes"
+      SONARQUBE_DEFAULT_DATABASE_HOST: postgres
+      SONARQUBE_DATABASE_HOST: ${STACK_SERVICE_HOSTNAME}-db
+      SONARQUBE_DATABASE_PORT_NUMBER: 5432
+      SONARQUBE_DATABASE_USER: ${STACK_SERVICE_DEFAULT_USER}
+      SONARQUBE_DATABASE_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      SONARQUBE_DATABASE_NAME: ${STACK_SERVICE_DEFAULT_DATABASE}
+
+      #POSTGRESQL_CLIENT_CREATE_DATABASE_NAME: ${STACK_SERVICE_DEFAULT_DATABASE}
+      #POSTGRESQL_CLIENT_CREATE_DATABASE_USERNAME: ${STACK_SERVICE_DEFAULT_PASS}
+      #POSTGRESQL_CLIENT_CREATE_DATABASE_PASSWORD: ${STACK_SERVICE_DEFAULT_USER}
+
+      # SONARQUBE_DATA_TO_PERSIST: /opt/bitnami/sonarqube
+      # SONARQUBE_DATA_DIR: /opt/bitnami/sonarqube/data
+      # SONARQUBE_EXTENSIONS_DIR: /opt/bitnami/sonarqube/extensions
+      # SONARQUBE_CONF_DIR: /opt/bitnami/sonarqube/conf
+      # SONARQUBE_CONF_FILE: /opt/bitnami/sonarqube/conf/sonar.properties
+      # SONARQUBE_LOGS_DIR: /opt/bitnami/sonarqube/logs/
+      # SONARQUBE_LOG_FILE: /opt/bitnami/sonarqube/logs/sonar.log
+
+      # SONARQUBE_SMTP_HOST: smtp.gmail.com
+      # SONARQUBE_SMTP_PORT_NUMBER: 587
+      # SONARQUBE_SMTP_USER: your_email@gmail.com
+      # SONARQUBE_SMTP_PASSWORD: your_password
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/bitnami
+      - ${STACK_INFRA_CONF_DIR}/sonarqube/extensions/plugins/sonarqube-community-branch-plugin-1.18.0.jar:/opt/bitnami/sonarqube/extensions/plugins/sonarqube-community-branch-plugin-1.18.0.jar
+      # - ${STACK_SERVICE_STORAGE_DATA_DIR}:/opt/bitnami/sonarqube/data
+      # - ${STACK_SERVICE_STORAGE_CONFIG_DIR}:/opt/bitnami/sonarqube/conf
+      - ${STACK_INFRA_CONF_DIR}/sonarqube/conf/sonar.properties:/opt/bitnami/sonarqube/conf/sonar.properties:rw
+      - ${STACK_SERVICE_STORAGE_LOG_DIR}:/opt/bitnami/sonarqube/logs      
+      # - ${STACK_SERVICE_STORAGE_EXTENSION_DIR}:${STACK_INFRA_CONF_DIR}/sonarqube/extensions:rw
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=8080
+    networks:
+      - stack-nt
+      - stack-nt-security

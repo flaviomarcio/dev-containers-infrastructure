@@ -1,0 +1,78 @@
+version: '3.9'
+
+#ref
+# https://github.com/grafana/tempo/tree/main/example/docker-compose
+# https://github.com/grafana/tempo/blob/main/example/docker-compose/local/docker-compose.yaml
+# https://github.com/grafana/tempo/blob/main/example/docker-compose/shared/tempo.yaml
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-grf-tempo:
+    name: ${STACK_NETWORK_GRAFANA_TEMPO}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    environment:
+      TZ: ${STACK_TZ}
+    command: 
+      - -config.file=/etc/tempo.yaml
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/tmp/tempo
+      - ${STACK_INFRA_CONF_DIR}/grafana/tempo/config.yml:/etc/tempo.yaml
+      # - /var/run/docker.sock:/var/run/docker.sock
+    # ports:
+      # # jaeger ingest
+      # - target: 14268  
+      #   protocol: tcp
+      #   mode: host
+
+      # tempo
+      # - target: 3200
+      #   protocol: tcp
+      #   mode: ingress
+
+      # # otlp grpc
+      # - target: 4317
+      #   protocol: tcp
+      #   mode: ingress
+
+      # # otlp http
+      # - target: 4318
+      #   protocol: tcp
+      #   mode: ingress
+
+      # # zipkin
+      # - target: 9411
+      #   protocol: tcp
+      #   mode: ingress
+
+
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=3200
+    networks:
+      - stack-nt
+      - stack-nt-grf-tempo

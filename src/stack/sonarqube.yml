@@ -1,0 +1,84 @@
+version: '3'
+
+#ref
+#   https://hub.docker.com/_/sonarqube/
+#   https://github.com/SonarSource/docker-sonarqube/blob/master/example-compose-files/sq-with-postgres/docker-compose.yml
+#   https://github.com/SonarSource/docker-sonarqube/blob/master/example-compose-files/sq-with-h2/docker-compose.yml
+#   https://docs.sonarsource.com/sonarqube/latest/setup-and-upgrade/configure-and-operate-a-server/environment-variables/
+#   https://docs.sonarsource.com/sonarqube/latest/setup-and-upgrade/install-the-server/advanced-installation-features/
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+
+services:
+  db:
+    image: ${STACK_SERVICE_IMAGE_POSTGRES}
+    hostname: ${STACK_SERVICE_HOSTNAME}-db
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DB_DIR}:/postgresql/pg/data
+    environment: 
+      TZ: ${STACK_TZ}
+      POSTGRES_USER: ${STACK_SERVICE_DEFAULT_USER}
+      POSTGRES_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      PGDATA: /postgresql/pg/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "${STACK_SERVICE_DEFAULT_DATABASE}", "-U", "${STACK_SERVICE_DEFAULT_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-security
+
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    depends_on:
+      - db
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://${STACK_SERVICE_HOSTNAME}-db:5432/${STACK_SERVICE_DEFAULT_DATABASE}
+      SONAR_JDBC_USERNAME: ${STACK_SERVICE_DEFAULT_USER}
+      SONAR_JDBC_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/opt/sonarqube/data
+      - ${STACK_INFRA_CONF_DIR}/sonarqube/extensions:/opt/sonarqube/extensions
+      - ${STACK_SERVICE_STORAGE_LOG_DIR}:/opt/sonarqube/logs
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=9000
+    networks:
+      - stack-nt
+      - stack-nt-security

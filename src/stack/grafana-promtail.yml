@@ -1,0 +1,55 @@
+version: '3.9'
+
+#ref
+#   https://github.com/benderstwin/Portainer-Templates/blob/master/traefik-compose.yml
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-grf-loki:
+    name: ${STACK_NETWORK_GRAFANA_LOKI}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    environment:
+      TZ: ${STACK_TZ}
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/opt/promtail
+      - ${STACK_INFRA_CONF_DIR}/grafana/promtail/config.yml:/etc/promtail/config.yml
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/containers:/var/lib/docker/containers
+      - /tmp:/tmp
+    command: -config.file=/etc/promtail/config.yml
+    # ports:
+    #   - target: 9080
+    #     protocol: tcp
+    #     mode: ingress
+    deploy:
+      mode: replicated
+      replicas: ${APPLICATION_DEPLOY_REPLICAS}
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=3100
+    networks:
+      - stack-nt
+      - stack-nt-grf-loki

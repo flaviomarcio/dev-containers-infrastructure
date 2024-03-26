@@ -1,0 +1,112 @@
+version: '3.9'
+
+#ref
+# https://grafana.com/docs/tempo/latest/configuration/
+# https://grafana.com/docs/tempo/latest/configuration/#storage
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-sre:
+    name: ${STACK_NETWORK_SRE}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+  stack-nt-grf-loki:
+    name: ${STACK_NETWORK_GRAFANA_LOKI}
+    external: true
+  stack-nt-grf-tempo:
+    name: ${STACK_NETWORK_GRAFANA_TEMPO}
+    external: true
+  stack-nt-grf-k6:
+    name: ${STACK_NETWORK_GRAFANA_K6}
+    external: true
+
+services:
+  pg:
+    image: ${STACK_SERVICE_IMAGE_POSTGRES}
+    hostname: ${STACK_SERVICE_HOSTNAME}-pg
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DB_DIR}:/postgresql/pg/data
+    environment: 
+      TZ: ${STACK_TZ}
+      POSTGRES_USER: ${STACK_SERVICE_DEFAULT_USER}
+      POSTGRES_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      PGDATA: /postgresql/pg/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "${STACK_SERVICE_DEFAULT_DATABASE}", "-U", "${STACK_SERVICE_DEFAULT_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-security
+
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    user: "472"
+    depends_on:
+      - postgres
+    environment:
+      TZ: ${STACK_TZ}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_SECURITY_ADMIN_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      GF_USERS_ALLOW_SIGN_UP: "true"
+      GF_DATABASE_URL: postgres://${STACK_SERVICE_DEFAULT_USER}:${STACK_SERVICE_DEFAULT_PASS}@${STACK_SERVICE_HOSTNAME_GRAFANA_PG}:5432/grafana
+      GF_DATABASE_SSL_MODE: disable
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+      GF_ENABLE_GZIP: "true"
+      GF_INSTALL_PLUGINS: grafana-piechart-panel,camptocamp-prometheus-alertmanager-datasource
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/var/lib/grafana/data
+      - ${STACK_INFRA_CONF_DIR}/grafana/dashboard/grafana.ini:/etc/grafana/grafana.ini
+      - ${STACK_INFRA_CONF_DIR}/grafana/dashboard/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ${STACK_INFRA_CONF_DIR}/grafana/dashboard/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      #- ${STACK_INFRA_CONF_DIR}/grafana/dashboard/provisioning/plugins:/etc/grafana/provisioning/plugins
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=3000
+    networks:
+      - stack-nt
+      - stack-nt-sre
+      - stack-nt-security
+      - stack-nt-grf-loki
+      - stack-nt-grf-tempo
+      - stack-nt-grf-k6
+

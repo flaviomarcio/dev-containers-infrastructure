@@ -1,0 +1,371 @@
+#ref
+#   https://hub.docker.com/r/camunda/camunda-bpm-platform
+#   https://github.com/camunda/docker-camunda-bpm-platform
+#   https://docs.camunda.io/docs/self-managed/platform-deployment/docker/
+
+version: '3.9'
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  # stack-nt-camunda:
+  #   name: ${STACK_NETWORK_CAMUNDA}
+  #   external: true
+
+services:
+  db:
+    image: ${STACK_SERVICE_IMAGE_POSTGRES}
+    hostname: ${STACK_SERVICE_HOSTNAME}-db
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "camunda", "-U", "camunda"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DB_DIR}:/postgresql/pg/data
+    environment:
+      TZ: ${STACK_TZ}
+      POSTGRES_USER: camunda
+      POSTGRES_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      PGDATA: /postgresql/pg/data
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt
+
+  modeler:
+    image: camunda/camunda-modeler:latest
+    hostname: ${STACK_SERVICE_HOSTNAME}-modeler
+    environment:
+      TZ: ${STACK_TZ}
+    # ports:
+    #   - "3000:3000"
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}-modeler.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=3000
+        - traefik.docker.network=${STACK_NETWORK_CAMUNDA}
+    networks:
+      - stack-nt
+
+  # zeebe:
+  #   image: camunda/zeebe:latest
+  #   hostname: ${STACK_SERVICE_HOSTNAME}-zeebe
+  #   depends_on:
+  #     - db
+  #   healthcheck:
+  #     test: ["CMD", "nc", "-z", "localhost", "26500"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   # ports:
+  #   #   - "26500:26500"
+  #   #   - "9600:9600"
+  #   environment:
+  #     TZ: ${STACK_TZ}
+  #     ZEEBE_LOG_LEVEL: info
+  #   deploy:
+  #     mode: global
+  #     placement:
+  #       constraints:
+  #         - ${APPLICATION_DEPLOY_NODE_TOOL}
+  #     resources:
+  #       limits:
+  #         cpus: "${APPLICATION_DEPLOY_CPU}"
+  #         memory: ${APPLICATION_DEPLOY_MEMORY}
+        # update_config:
+        #   parallelism: 1
+        #   delay: 10s
+  #     restart_policy:
+  #       condition: any
+  #     labels:
+  #       - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+  #       - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}-zeebe.*}`)
+  #       - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+  #       - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=26500
+  #       - traefik.docker.network=${STACK_NETWORK_CAMUNDA}
+  #   networks:
+  #     - stack-nt
+
+  # cockpit:
+  #   image: ${STACK_SERVICE_IMAGE_URL}
+  #   hostname: ${STACK_SERVICE_HOSTNAME}-cockpit
+  #   depends_on:
+  #     - db
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   # ports:
+  #   #   - "8081:8080"
+  #   environment:
+  #     TZ: ${STACK_TZ}
+  #   deploy:
+  #     mode: global
+  #     placement:
+  #       constraints:
+  #         - ${APPLICATION_DEPLOY_NODE_TOOL}
+  #     resources:
+  #       limits:
+  #         cpus: "${APPLICATION_DEPLOY_CPU}"
+  #         memory: ${APPLICATION_DEPLOY_MEMORY}
+        # update_config:
+        #   parallelism: 1
+        #   delay: 10s
+  #     restart_policy:
+  #       condition: any
+  #     labels:
+  #       - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+  #       - traefik.http.routers.${STACK_SERVICE_NAME}.rule=Host(`${STACK_SERVICE_HOSTNAME}-cockpit`) || Host(`${STACK_SERVICE_HOSTNAME_PUBLIC}-cockpit`)
+  #       - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+  #       - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=8080
+  #       - traefik.docker.network=${STACK_NETWORK_CAMUNDA}
+  #   networks:
+  #     - stack-nt
+
+
+  # tasklist:
+  #   image: ${STACK_SERVICE_IMAGE_URL}
+  #   hostname: ${STACK_SERVICE_HOSTNAME}-tasklist
+  #   depends_on:
+  #     - db
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   environment:
+  #     TZ: ${STACK_TZ}
+  #     CAMUNDA_TASKLIST_USERNAME: myusername
+  #     CAMUNDA_TASKLIST_PASSWORD: mypassword
+  #   deploy:
+  #     mode: global
+  #     placement:
+  #       constraints:
+  #         - ${APPLICATION_DEPLOY_NODE_TOOL}
+  #     resources:
+  #       limits:
+  #         cpus: "${APPLICATION_DEPLOY_CPU}"
+  #         memory: ${APPLICATION_DEPLOY_MEMORY}
+        # update_config:
+        #   parallelism: 1
+        #   delay: 10s
+  #     restart_policy:
+  #       condition: any
+  #     labels:
+  #       - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+  #       - traefik.http.routers.${STACK_SERVICE_NAME}.rule=Host(`${STACK_SERVICE_HOSTNAME}-tasklist`) || Host(`${STACK_SERVICE_HOSTNAME_PUBLIC}-tasklist`)
+  #       - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+  #       - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=8080
+  #       - traefik.docker.network=${STACK_NETWORK_CAMUNDA}
+  #   networks:
+  #     - stack-nt
+
+  # srv:
+  #   image: ${STACK_SERVICE_IMAGE_URL}
+  #   hostname: ${STACK_SERVICE_HOSTNAME}
+  #   depends_on:
+  #     - db
+  #   # healthcheck:
+  #   #   test: ["CMD", "curl", "-f", "http://localhost:8080"]
+  #   #   interval: 30s
+  #   #   timeout: 10s
+  #   #   retries: 3
+  #   # volumes:
+  #   #   - "./ssl:/mnt/ssl"
+  #   # ports:
+  #   #   - "8080:8080"
+  #   environment:
+  #     TZ: ${STACK_TZ}
+  #     JAVA_OPTS: "-XX:-UseContainerSupport"
+  #     CAMUNDA_BPM_PLATFORM_DATABASE_TYPE: postgres
+  #     CAMUNDA_BPM_PLATFORM_DATABASE_DRIVER: org.postgresql.Driver
+  #     CAMUNDA_BPM_PLATFORM_DATABASE_JDBC_URL: jdbc:postgresql://${STACK_SERVICE_HOSTNAME}-db:5432/camunda
+  #     CAMUNDA_BPM_PLATFORM_DATABASE_USERNAME: camunda
+  #     CAMUNDA_BPM_PLATFORM_DATABASE_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+  #     CAMUNDA_BPM_PLATFORM_ADMIN_USER: ${STACK_SERVICE_DEFAULT_USER}
+  #     CAMUNDA_BPM_PLATFORM_ADMIN_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+
+  #     DB_CONN_MAXACTIVE: 20
+  #     DB_CONN_MAXIDLE: 20
+  #     DB_CONN_MINIDLE: 5
+  #     DB_DRIVER: org.postgresql.Driver
+  #     DB_URL: jdbc:postgresql://${STACK_SERVICE_HOSTNAME}-db:5432/camunda
+  #     DB_USERNAME: camunda
+  #     DB_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+  #     WAIT_FOR: ${STACK_SERVICE_HOSTNAME}-db:5432
+  #     WAIT_FOR_TIMEOUT: 120
+  #   deploy:
+  #     mode: global
+  #     placement:
+  #       constraints:
+  #         - ${APPLICATION_DEPLOY_NODE_TOOL}
+        # update_config:
+        #   parallelism: 1
+        #   delay: 10s
+  #     resources:
+  #       limits:
+  #         cpus: "${APPLICATION_DEPLOY_CPU}"
+  #         memory: ${APPLICATION_DEPLOY_MEMORY}
+  #     restart_policy:
+  #       condition: any
+  #     labels:
+  #       # - traefik.enable=false
+  #       - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+  #       - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+  #       - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+  #       - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=8080
+  #       - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+  #   networks:
+  #     - stack-nt
+
+
+  rest:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    depends_on:
+      - db
+    command:
+    #   # Enable only:
+    #   - --webapps
+      - --rest
+    #   - --swaggerui
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8080"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    # volumes:
+    #   - "./ssl:/mnt/ssl"
+    # ports:
+    #   - "8080:8080"
+    environment:
+      TZ: ${STACK_TZ}
+      JAVA_OPTS: "-XX:-UseContainerSupport"
+      DB_CONN_MAXACTIVE: 20
+      DB_CONN_MAXIDLE: 20
+      DB_CONN_MINIDLE: 5
+      DB_DRIVER: org.postgresql.Driver
+      DB_URL: jdbc:postgresql://${STACK_SERVICE_HOSTNAME}-db:5432/camunda
+      DB_USERNAME: camunda
+      DB_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      WAIT_FOR: ${STACK_SERVICE_HOSTNAME}-db:5432
+      WAIT_FOR_TIMEOUT: 120
+
+      CAMUNDA_USER_USERNAME: ${STACK_SERVICE_DEFAULT_USER}
+      CAMUNDA_USER_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      CAMUNDA_ADMIN_USER: ${STACK_SERVICE_DEFAULT_USER}
+      CAMUNDA_ADMIN_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        # - traefik.enable=false
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=8080
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+    networks:
+      - stack-nt
+
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    depends_on:
+      - db
+    command:
+      # Enable only:
+      - --webapps
+      - --swaggerui
+      # - --rest
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8080"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    # volumes:
+    #   - "./ssl:/mnt/ssl"
+    # ports:
+    #   - "8080:8080"
+    environment:
+      TZ: ${STACK_TZ}
+      JAVA_OPTS: "-XX:-UseContainerSupport"
+      DB_CONN_MAXACTIVE: 20
+      DB_CONN_MAXIDLE: 20
+      DB_CONN_MINIDLE: 5
+      DB_DRIVER: org.postgresql.Driver
+      DB_URL: jdbc:postgresql://${STACK_SERVICE_HOSTNAME}-db:5432/camunda
+      DB_USERNAME: camunda
+      DB_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      WAIT_FOR: ${STACK_SERVICE_HOSTNAME}-db:5432
+      WAIT_FOR_TIMEOUT: 120
+
+      CAMUNDA_USER_USERNAME: ${STACK_SERVICE_DEFAULT_USER}
+      CAMUNDA_USER_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      CAMUNDA_ADMIN_USER: ${STACK_SERVICE_DEFAULT_USER}
+      CAMUNDA_ADMIN_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        # - traefik.enable=false
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=8080
+    networks:
+      - stack-nt

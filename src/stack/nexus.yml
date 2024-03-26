@@ -1,0 +1,49 @@
+version: '3.9'
+
+#ref
+# https://hub.docker.com/r/sonatype/nexus3/
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+    
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/nexus-data
+    environment:
+      TZ: ${STACK_TZ}
+      NEXUS_SECURITY_RANDOMPASSWORDL: "false"
+      NEXUS_ADMIN_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      # NEXUS_SECURITY_REALM: "Sonatype Nexus Repository Manager"
+      # NEXUS_SECURITY_TLS_TRUSTSTORE_PASSWORD: your_truststore_password
+      # NEXUS_SECURITY_TLS_KEYSTORE_PASSWORD: your_keystore_password
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=8081
+    networks:
+      - stack-nt
+
+#docker run -d -p 8081:8081 --name nexus -e INSTALL4J_ADD_VM_PARAMS="-Xms2703m -Xmx2703m -XX:MaxDirectMemorySize=2703m -Djava.util.prefs.userRoot=/some-other-dir" sonatype/nexus3

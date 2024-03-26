@@ -1,0 +1,6 @@
+#!/bin/bash
+
+#ref
+#   https://dev.mysql.com/doc/mysql-shell/8.0/en/mysqlsh.html
+
+mysqlsh --host=development-company-msg-mysql --user=services --dbpassword=ZjU0ODUyMjVi --database=services --fido-register-factor=2

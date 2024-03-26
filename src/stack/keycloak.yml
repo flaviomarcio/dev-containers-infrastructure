@@ -1,0 +1,146 @@
+version: '3.9'
+
+#ref
+#   https://www.keycloak.org/server/containers
+#   https://www.keycloak.org/server/db
+#   https://github.com/keycloak/keycloak/issues/25467
+#   https://www.mastertheboss.com/keycloak/getting-started-with-keycloak-powered-by-quarkus/
+
+#   https://www.keycloak.org/server/containers
+#   https://www.keycloak.org/server/hostname
+#   https://www.keycloak.org/server/configuration-production
+#   https://www.keycloak.org/server/enabletls
+
+#   importante
+#     - https://www.keycloak.org/guides
+#     - https://www.keycloak.org/server/vault obs: ldao implements
+#   
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+
+services:
+  db:
+    image: ${STACK_SERVICE_IMAGE_POSTGRES}
+    hostname: ${STACK_SERVICE_HOSTNAME}-db
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DB_DIR}:/postgresql/pg/data
+    environment: 
+      TZ: ${STACK_TZ}
+      POSTGRES_USER: ${STACK_SERVICE_DEFAULT_USER}
+      POSTGRES_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      PGDATA: /postgresql/pg/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "${STACK_SERVICE_DEFAULT_DATABASE}", "-U", "${STACK_SERVICE_DEFAULT_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-security
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    environment:
+      TZ: ${STACK_TZ}
+
+      KEYCLOAK_ADMIN: ${STACK_SERVICE_DEFAULT_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${STACK_SERVICE_DEFAULT_DATABASE}
+
+      # Configurações do LDAP
+      INFO_LDAP_ORDER_00__LDAP_BIND_DN: "cn=admin,${STACK_LDAP_ROOT_DN}"
+      INFO_LDAP_ORDER_01__LDAP_BIND_CREDENTIALS: admin
+      INFO_LDAP_ORDER_02__LDAP_PROVIDER_URL: ldap://int-ldap:389
+      INFO_LDAP_ORDER_03__LDAP_USERS_DN: "OU=Users,${STACK_LDAP_ROOT_DN}"
+      INFO_LDAP_ORDER_04__LDAP_CONNECTION_POOL_TIMEOUT: 60000
+      INFO_LDAP_ORDER_05__LDAP_START_TLS: "false"
+      INFO_LDAP_ORDER_06__LDAP_VALIDATE_PASSWORD_POLICY: "false"
+      INFO_LDAP_ORDER_07__LDAP_SEARCH_UPDATING_USERS_DN: ou=people,${STACK_LDAP_ROOT_DN}
+      INFO_LDAP_ORDER_08__LDAP_SEARCH_UPDATING_USERNAME_LDAP_ATTRIBUTE: uid
+      INFO_LDAP_ORDER_09__LDAP_SEARCH_UPDATING_RDN_LDAP_ATTRIBUTE: uid
+      INFO_LDAP_ORDER_10__LDAP_SEARCH_UPDATING_UUID_LDAP_ATTRIBUTE: uid
+      INFO_LDAP_ORDER_11__LDAP_SEARCH_UPDATING_USER_OBJECT_CLASSES: inetOrgPerson
+
+    
+
+    entrypoint: [
+      #production
+        #"/opt/keycloak/bin/kc.sh", "start", "--optimized"
+      #develop
+       "/opt/keycloak/bin/kc.sh", "start-dev"
+      ,"--hostname=${STACK_SERVICE_HOSTNAME_PUBLIC}"
+      ,"--hostname-admin=${STACK_SERVICE_HOSTNAME_PUBLIC}"
+      ,"--https-certificate-file=/cert/certfile.pem"
+      ,"--https-certificate-key-file=/cert/keyfile.pem"
+      #,"--hostname-strict=false"
+      #,"--hostname-strict-https=false"
+      # ,"--https-key-store-password=secret"
+      # ,"--health-enabled=true"
+      # ,"--metrics-enabled=true"
+      # ,"--features=token-exchange"
+      ,"--db=postgres"
+      ,"--db-username=${STACK_SERVICE_DEFAULT_USER}"
+      ,"--db-password=${STACK_SERVICE_DEFAULT_PASS}"
+      ,"--db-schema=public"
+      ,"--db-url-database=${STACK_SERVICE_DEFAULT_DATABASE}"
+      ,"--transaction-xa-enabled=true"
+      ,"--db-url=jdbc:postgresql://${STACK_SERVICE_HOSTNAME}-db:5432/${STACK_SERVICE_DEFAULT_DATABASE}"
+      ]
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DB_DIR}:/database
+      - ${STACK_SERVICE_STORAGE_PROVIDER_DIR}:/opt/keycloak/providers
+      - ${STACK_SERVICE_STORAGE_IMPORT_DIR}:/opt/keycloak/data/import
+      - ${STACK_INFRA_CONF_DIR}/keycloack/cert:/cert
+      # - ${STACK_INFRA_CONF_DIR}/keycloack/domain.xml:/opt/keycloak/domain/configuration/domain.xml
+    # command:
+    #   - start-dev
+    #   - --hostname-port=8080 
+    #   - --hostname-admin=${STACK_SERVICE_HOSTNAME_KEYCLOAK}
+    #   - --hostname-strict-backchannel=true
+    #   - --spi-dblock-jpa-lock-wait-timeout 900
+    #   - --import-realm
+    #   #- --hostname=${STACK_SERVICE_HOSTNAME_KEYCLOAK}
+    # ports:
+    #   - target: 8443
+    #     protocol: tcp
+    #   - target: 8080
+    #     protocol: tcp
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=8080
+    networks:
+      - stack-nt
+      - stack-nt-security

@@ -1,0 +1,53 @@
+version: '3.9'
+
+#ref
+#   docker pull mcr.microsoft.com/mssql/server
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    user: "root"
+    image: ${STACK_SERVICE_IMAGE_MSSQL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    environment:
+      TZ: ${STACK_TZ}
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${STACK_SERVICE_DEFAULT_PASS}!Ab"
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/var/opt/mssql/data:rw
+      - ${STACK_SERVICE_STORAGE_LOG_DIR}:/var/opt/mssql/log:rw
+      - ${STACK_SERVICE_STORAGE_CERT_DIR}:/var/opt/mssql/security/ca-certificates:rw
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:1433"]
+    #   interval: 10s
+    #   retries: 3
+    #   start_period: 30s
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.rule=HostSNI(`*`)
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.entryPoints=mssql
+        - traefik.tcp.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.tcp.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=1433
+    networks:
+      - stack-nt

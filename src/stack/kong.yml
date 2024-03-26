@@ -1,0 +1,186 @@
+version: '3.9'
+
+#ref
+#   https://hub.docker.com/r/kong/kong-gateway
+#   https://github.com/Kong/docker-kong/blob/master/compose/docker-compose.yml
+
+#Docs
+#   https://docs.konghq.com/gateway/3.6.x/install/docker/
+#   https://docs.konghq.com/gateway/latest/
+#   https://docs.konghq.com/gateway/latest/kong-manager-oss/
+#   https://docs.konghq.com/gateway/latest/install/docker/
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+  # stack-nt-kong:
+  #   name: ${STACK_NETWORK_KONG}
+  #   external: true
+
+services:
+  db:
+    image: ${STACK_SERVICE_IMAGE_POSTGRES}
+    hostname: ${STACK_SERVICE_HOSTNAME}-db
+    volumes:
+      #- ${STACK_INFRA_CONF_DIR}/postgres/initdb.sql:/docker-entrypoint-initdb.d
+      - ${STACK_SERVICE_STORAGE_DB_DIR}:/postgresql/pg/data
+    environment:
+      TZ: ${STACK_TZ}
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      PGDATA: /postgresql/pg/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "kong", "-U", "kong"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-security
+
+  migrations:
+    image: "${STACK_SERVICE_IMAGE_URL}"
+    depends_on:
+      - db
+    command: kong migrations bootstrap
+    environment:
+      TZ: ${STACK_TZ}
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: kong
+      KONG_PG_HOST: ${STACK_SERVICE_HOSTNAME}-db
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      KONG_PG_SCHEMA: public
+      KONG_CASSANDRA_CONTACT_POINTS: ${STACK_SERVICE_HOSTNAME}-db
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: on-failure
+    networks:
+      - stack-nt-security
+
+  migrations_up:
+    image: "${STACK_SERVICE_IMAGE_URL}"
+    depends_on:
+      - db
+    command: kong migrations up && kong migrations finish
+    environment:
+      TZ: ${STACK_TZ}
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: kong
+      KONG_PG_HOST: ${STACK_SERVICE_HOSTNAME}-db
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      KONG_PG_SCHEMA: public
+      KONG_CASSANDRA_CONTACT_POINTS: ${STACK_SERVICE_HOSTNAME}-db
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: on-failure
+    networks:
+      - stack-nt-security
+
+  srv:
+    user: "root"
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    depends_on:
+      - db
+    environment:
+      TZ: ${STACK_TZ}
+      LC_CTYPE: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      KONG_LOG_LEVEL: info
+      #KONG_LICENSE_DATA: '{"license":{"payload":{"admin_seats":"1","customer":"${STACK_TARGET}, Inc","...":"1","license_creation_date":"${CUR_DATE}","license_expiration_date":"2500-01-01","license_key":"00141000017ODj3AAG_a1V41000004wT0OEAU","product_subscription":"Konnect Enterprise","support_plan":"None"},"signature":"6985968131533a967fcc721244a979948b1066967f1e9cd65dbd8eeabe060fc32d894a2945f5e4a03c1cd2198c74e058ac63d28b045c2f1fcec95877bd790e1b","version":"1"}}'
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: kong
+      KONG_PG_HOST: ${STACK_SERVICE_HOSTNAME}-db
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      KONG_PG_SCHEMA: public
+      KONG_CASSANDRA_CONTACT_POINTS: ${STACK_SERVICE_HOSTNAME}-db
+
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001, 0.0.0.0:8444 ssl"
+      KONG_ADMIN_GUI_LISTEN: "0.0.0.0:8002"
+      KONG_ADMIN_GUI_URL: http://localhost:8002
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+
+      # volumes:
+      #   - "./ssl:/mnt/ssl"
+      # environment:
+      #   - KONG_SSL_CERT=/mnt/ssl/ssl.pem
+      #   - KONG_SSL_CERT_KEY=/mnt/ssl/ssl.key
+
+      # KONG_DECLARATIVE_CONFIG: "/opt/kong/kong.yaml"
+      # KONG_PREFIX: /var/run/kong
+    healthcheck:
+      test: [ "CMD", "kong", "health" ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/var/run/kong
+      - ${STACK_SERVICE_STORAGE_LOG_DIR}:/var/run/kong/logs
+      # - "./ssl:/mnt/ssl"
+      # - kong_tmp_vol:/tmp
+      # - ./config:/opt/kong
+    ports:
+      - 8000:8000
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)        
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=8002
+    networks:
+      - stack-nt
+      - stack-nt-security
+
+

@@ -1,0 +1,137 @@
+#ref
+#   https://hub.docker.com/r/apache/nifi
+#   https://hub.docker.com/r/bitnami/zookeeper
+#   https://hub.docker.com/_/zookeeper
+#   https://github.com/hortonworks-gallery/nifi-templates/tree/master
+#   https://github.com/apache/nifi/blob/master/nifi-docker/docker-compose/docker-compose.yml
+
+version: '3.9'
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+
+services:
+
+  # registry:
+  #   hostname: ${STACK_SERVICE_HOSTNAME}-registry
+  #   image: apache/nifi-registry:1.25.0
+  #   # ports:
+  #   #     - "18080:18080"
+  #   environment:
+  #     - LOG_LEVEL=INFO
+  #     - NIFI_REGISTRY_DB_DIR=/opt/nifi-registry/nifi-registry-current/database
+  #     - NIFI_REGISTRY_FLOW_PROVIDER=file
+  #     - NIFI_REGISTRY_FLOW_STORAGE_DIR=/opt/nifi-registry/nifi-registry-current/flow_storage
+  #   # volumes:
+  #     # - ${STACK_SERVICE_STORAGE_DB_DIR}:/opt/nifi-registry/nifi-registry-current
+  #     #- nifi_registry_database:/opt/nifi-registry/nifi-registry-current/database
+  #     #- nifi_registry_flow_storage:/opt/nifi-registry/nifi-registry-current/flow_storage
+  #   deploy:
+  #     mode: global
+  #     placement:
+  #       constraints:
+  #         - ${APPLICATION_DEPLOY_NODE_DB}
+  #     resources:
+  #       limits:
+  #         cpus: "${APPLICATION_DEPLOY_CPU}"
+  #         memory: ${APPLICATION_DEPLOY_MEMORY}
+  #     restart_policy:
+  #       condition: any
+  #   networks:
+  #     - stack-nt-security
+
+  # zookeeper:
+  #   image: bitnami/zookeeper:3.9.1
+  #   hostname: ${STACK_SERVICE_HOSTNAME}-zookeeper
+  #   healthcheck:
+  #     test: ["CMD", "nc", "-z", "localhost", "2181"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+  #   environment:
+  #     TZ: ${STACK_TZ}
+  #     ALLOW_ANONYMOUS_LOGIN: "yes"
+  #   # ports:
+  #   #   - 2181:2181
+  #   deploy:
+  #     mode: global
+  #     placement:
+  #       constraints:
+  #         - ${APPLICATION_DEPLOY_NODE_TOOL}
+  #     resources:
+  #       limits:
+  #         cpus: "${APPLICATION_DEPLOY_CPU}"
+  #         memory: ${APPLICATION_DEPLOY_MEMORY}
+  #     restart_policy:
+  #       condition: any
+  #   networks:
+  #     - stack-nt-security
+
+  srv:
+    #image: apache/nifi:2.0.0-M1
+    image: apache/nifi:1.19.0
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    # depends_on:
+    #   - zookeeper
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8080/nifi"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    environment:
+      TZ: ${STACK_TZ}
+      NIFI_WEB_HTTP_PORT: 8080
+      # NIFI_CLUSTER_IS_NODE: "false"
+      # NIFI_CLUSTER_NODE_PROTOCOL_PORT: 8082
+      # NIFI_ZK_CONNECT_STRING: ${STACK_SERVICE_HOSTNAME}-zookeeper:2181
+      # NIFI_ELECTION_MAX_WAIT: "1 min"
+
+      # NIFI_ADMINISTRATIVE_YIELD_DURATION: "30 sec"
+      # NIFI_SECURITY_USER_LOGIN_IDENTITY: ${STACK_ADMIN_USERNAME}
+      # NIFI_SECURITY_USER_LOGIN_PASSWORD: ${STACK_ADMIN_PASSWORD}
+      # NIFI_SENSITIVE_PROPS_KEY: '12345678901234567890A'
+      # SINGLE_USER_CREDENTIALS_USERNAME: ${STACK_ADMIN_USERNAME}
+      # SINGLE_USER_CREDENTIALS_PASSWORD: ${STACK_ADMIN_PASSWORD}
+
+      # # NIFI_WEB_PROXY_HOST: ${STACK_SERVICE_HOSTNAME}
+    # ports:
+    #   - 8081:8080
+    # volumes:
+      # - ${STACK_SERVICE_STORAGE_DATA_DIR}:/opt/nifi/nifi-current
+      # - ${STACK_INFRA_CONF_DIR}/nifi/resources:/opt/nifi/nifi-current/resources
+      # - ${STACK_INFRA_CONF_DIR}/nifi/templates:/opt/nifi/nifi-current/templates
+            # - ./nifi/database_repository:/opt/nifi/nifi-current/database_repository
+            # - ./nifi/flowfile_repository:/opt/nifi/nifi-current/flowfile_repository
+            # - ./nifi/content_repository:/opt/nifi/nifi-current/content_repository
+            # - ./nifi/provenance_repository:/opt/nifi/nifi-current/provenance_repository
+            # - ./nifi/state:/opt/nifi/nifi-current/state
+            # - ./nifi/logs:/opt/nifi/nifi-current/logs
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=8080
+    networks:
+      - stack-nt
+      - stack-nt-security

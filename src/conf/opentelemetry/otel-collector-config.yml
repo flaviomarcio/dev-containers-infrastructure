@@ -1,0 +1,47 @@
+#ref
+# https://www.timescale.com/blog/prometheus-vs-opentelemetry-metrics-a-complete-guide/
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+  zipkin:
+
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: ottel-collector-prometheus
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['${STACK_SERVICE_HOSTNAME_PROMETHEUS}:9090']
+
+exporters:
+  jaeger:
+    endpoint: ${STACK_SERVICE_HOSTNAME_JAEGER}:14250
+    tls:
+      insecure: true
+  zipkin:
+    endpoint: "http://${STACK_SERVICE_HOSTNAME_ZIPKIN}:9411/api/v2/spans"
+  logging:
+    loglevel: debug
+
+
+processors:
+  batch:
+
+extensions:
+  health_check:
+  pprof:
+  zpages:
+
+service:
+  telemetry:
+    logs:
+      level: debug
+  extensions: [pprof, zpages, health_check]
+  pipelines:
+    traces:
+      receivers: [otlp, zipkin]
+      exporters: [zipkin, jaeger, logging]
+      processors: []
+      #processors: [batch]

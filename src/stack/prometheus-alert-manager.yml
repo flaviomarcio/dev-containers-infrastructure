@@ -1,0 +1,43 @@
+version: '3.9'
+
+#ref
+# https://github.com/prometheus/pushgateway
+# https://github.com/PagerTree/prometheus-grafana-alertmanager-example/tree/master/prometheus
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    environment:
+      TZ: ${STACK_TZ}
+    # ports:
+    #   - target: 9093
+    #     protocol: tcp
+    #     mode: ingress
+    volumes:
+      - ${STACK_INFRA_CONF_DIR}/prometheus/alert-manager/config.yml:/etc/alertmanager/config.yml
+    # CONSIDERAR USO DO DOCKER VOLUME
+    #  - ${STACK_SERVICE_STORAGE_DATA_DIR}:/etc/alertmanager/
+    command:
+      - --config.file=/etc/alertmanager/config.yml
+      - --storage.path=/alertmanager
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt

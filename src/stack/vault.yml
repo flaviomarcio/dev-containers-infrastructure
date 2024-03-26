@@ -1,0 +1,76 @@
+version: '3.9'
+
+#ref
+#   construido baseando-se em:
+#       https://github.com/ahmetkaftan/docker-vault/blob/master/docker-compose.yml
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+    
+services:
+  init:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    environment:
+      VAULT_ADDR: http://${STACK_SERVICE_HOSTNAME}:8200
+      STACK_VAULT_TOKEN: ${STACK_VAULT_TOKEN}
+      STACK_VAULT_TOKEN_DEPLOY: ${STACK_VAULT_TOKEN_DEPLOY}
+    volumes:
+      - ${STACK_INFRA_CONF_DIR}/vault/vault-init.sh:/usr/local/bin/vault-init.sh
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/vault/file/
+    command: /usr/local/bin/vault-init.sh
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: on-failure
+    networks:
+      - stack-nt-security
+
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - ${STACK_SERVICE_STORAGE_DATA_DIR}:/vault/file
+      - ${STACK_INFRA_CONF_DIR}/vault/cert:/vault/cert
+      - ${STACK_INFRA_CONF_DIR}/vault/config.hcl:/vault/config/config.hcl
+    environment:
+      TZ: ${STACK_TZ}
+      VAULT_ADDR: http://localhost:8200
+    command: server
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=8200
+    networks:
+      - stack-nt
+      - stack-nt-security

@@ -1,0 +1,72 @@
+version: '3.9'
+
+#ref
+# https://docs.docker.com/registry/deploying/
+# https://docs.docker.com/engine/swarm/stack-deploy/
+# https://github.com/maxmasetti/docker-compose-registry/blob/master/docker-compose.yml
+# https://www.baeldung.com/linux/docker-compose-private-repositories
+# https://docs.portainer.io/admin/registries/add
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    environment:
+      TZ: ${STACK_TZ}
+
+    volumes:
+      # - /var/run/docker.sock:/var/run/docker.sock
+      - ${STACK_HAPROXY_CERT_DIR}:/cert
+      - ${STACK_HAPROXY_CONFIG_FILE}:/usr/local/etc/haproxy/haproxy.cfg
+    ports:
+      - target: 80
+        protocol: tcp
+        published: ${STACK_HAPROXY_PROXY_PORT_HTTP}
+        mode: host
+
+      - target: 443
+        protocol: tcp
+        published: ${STACK_HAPROXY_PROXY_PORT_HTTPS}
+        mode: host
+
+      # - target: 5432
+      #   protocol: tcp
+      #   published: 5432
+      #   mode: host
+
+      # - target: 5672
+      #   protocol: tcp
+      #   published: 5672
+      #   mode: host
+
+      # - target: 8081
+      #   protocol: tcp
+      #   published: 8081
+      #   mode: host
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_FW}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=80
+    networks:
+      - stack-nt

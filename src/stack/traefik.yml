@@ -1,0 +1,125 @@
+#ref
+#   https://doc.traefik.io/traefik/observability/access-logs/
+#   https://doc.traefik.io/traefik/observability/metrics/prometheus/
+#   https://doc.traefik.io/traefik/v1.7/configuration
+#   https://doc.traefik.io/traefik/v1.7/configuration/metrics/
+#   https://doc.traefik.io/traefik/v2.4/middlewares/basicauth/
+#   https://doc.traefik.io/traefik/https/tls/
+#ref
+#   https://github.com/BkrmDahal/vault_traefik/blob/master/docker-compose.yml
+#   https://github.com/vegasbrianc/docker-traefik-prometheus
+#   https://dev.to/kanzitelli/deploying-postgresql-and-redis-behind-traefik-in-the-cloud-5an2
+version: '3.9'
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+services:
+  srv:
+    image: ${STACK_SERVICE_IMAGE_TRAEFIK}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    environment:
+      TZ: ${STACK_TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - --api
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.swarmMode=true
+      - --providers.docker.watch
+      - --entryPoints.http.address=:80
+      - --entryPoints.https.address=:443
+      - --entryPoints.registry.address=:5000
+      - --entryPoints.metrics.address=:8082
+      - --entryPoints.postgres.address=:5432
+      - --entryPoints.rabbitmq.address=:5672
+      - --entryPoints.influxdb.address=:8086
+      - --entryPoints.mysql.address=:3306
+      - --entryPoints.redis.address=:6379
+      - --entryPoints.mssql.address=:1433
+      - --entryPoints.activemq.address=:61616
+      - --accesslog=true
+      - --accesslog.bufferingsize=100
+      - --accesslog.format=json
+      #- --log.level=DEBUG
+      # - --metrics.prometheus=true
+      # - --metrics.prometheus.buckets=0.1,0.3,1.2,5.0
+      # - --metrics.prometheus.addEntryPointsLabels=true
+      # - --metrics.prometheus.addrouterslabels=true
+      # - --metrics.prometheus.addServicesLabels=true
+      # - --metrics.prometheus.entryPoint=metrics
+
+    ports:
+      #http
+      - target: 80
+        published: ${STACK_TRAEFIK_PORT_HTTP}
+        mode: host
+      #https
+      - target: 443
+        published: ${STACK_TRAEFIK_PORT_HTTPS}
+        mode: host
+      #registry
+      - target: 5000
+        published: ${STACK_TRAEFIK_PORT_REGISTRY}
+        mode: host
+      #postgres
+      - target: 5432
+        published: ${STACK_TRAEFIK_PORT_POSTGRES}
+        mode: host
+      #influxdb
+      - target: 8086
+        published: ${STACK_TRAEFIK_PORT_INFLUXDB}
+        mode: host
+      #rabbitmq
+      - target: 5672
+        published: ${STACK_TRAEFIK_PORT_RABBITMQ}
+        mode: host
+      #mysql
+      - target: 3306
+        published: ${STACK_TRAEFIK_PORT_MYSQL}
+        mode: host
+      #redis
+      - target: 6379
+        published: ${STACK_TRAEFIK_PORT_REDIS}
+        mode: host
+      #mssql
+      - target: 1433
+        published: ${STACK_TRAEFIK_PORT_MSSQL}
+        mode: host
+      #activemq
+      - target: 61616
+        published: 61616
+        mode: host
+
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_FW}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        # - traefik.http.routers.api.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        # - traefik.http.routers.api.service=api@internal
+        # - traefik.http.services.api.loadbalancer.server.port=8080
+
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.api.entryPoints=http,https
+        - traefik.http.routers.api.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.api.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.api.service=api@internal
+        - traefik.http.services.api.loadbalancer.server.port=8080
+    networks:
+      - stack-nt
+    

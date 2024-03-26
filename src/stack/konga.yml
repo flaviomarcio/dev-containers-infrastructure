@@ -1,0 +1,118 @@
+version: '3.9'
+
+#ref
+#   https://hub.docker.com/r/dockurr/dnsmasq
+
+#Docs
+#   https://github.com/pantsel/konga
+#   https://pantsel.github.io/konga/
+#   https://github.com/codeedu/apigateway-kong/blob/main/docker-kong/docker-compose.yaml
+#   https://github.com/hunter-ji/kong-konga-docker-compose/blob/master/docker-compose-production.yml
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+  stack-nt-security:
+    name: ${STACK_NETWORK_SECURITY}
+    external: true
+
+services:
+
+  db:
+    image: ${STACK_SERVICE_IMAGE_POSTGRES_9}
+    hostname: ${STACK_SERVICE_HOSTNAME}-db
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "konga", "-U", "konga"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    volumes:
+      #- ${STACK_INFRA_CONF_DIR}/postgres/initdb.sql:/docker-entrypoint-initdb.d
+      - ${STACK_SERVICE_STORAGE_DB_DIR}:/postgresql/pg/data
+    environment:
+      TZ: ${STACK_TZ}
+      POSTGRES_USER: konga
+      POSTGRES_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      PGDATA: /postgresql/pg/data
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_DB}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt-security
+
+  prepare:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    depends_on:
+      - db
+    environment:
+      TZ: ${STACK_TZ}
+      NODE_ENV: ${STACK_ENVIRONMENT}
+    command: "-c prepare -a postgres -u postgresql://konga:${STACK_SERVICE_DEFAULT_PASS}@${STACK_SERVICE_HOSTNAME}-db:5432/konga?sslmode=disable"
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: on-failure
+    networks:
+      - stack-nt-security
+
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: ${STACK_SERVICE_HOSTNAME}
+    depends_on:
+      - db
+    # volumes:
+    #   - "./ssl:/mnt/ssl"
+    environment:
+      TZ: ${STACK_TZ}
+      LC_CTYPE: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      NODE_ENV: ${STACK_ENVIRONMENT}
+      DB_ADAPTER: postgres
+      DB_HOST: ${STACK_SERVICE_HOSTNAME}-db
+      DB_USER: konga
+      DB_PASSWORD: ${STACK_SERVICE_DEFAULT_PASS}
+      DB_DATABASE: konga
+      DB_SCHEMA: public
+      TOKEN_SECRET: ${STACK_SERVICE_DEFAULT_TOKEN}
+    # ports:
+    #   - "1338:1338"
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=1338
+    networks:
+      - stack-nt
+      - stack-nt-security

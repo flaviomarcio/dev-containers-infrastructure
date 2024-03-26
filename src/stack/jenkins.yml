@@ -1,0 +1,72 @@
+version: '3.9'
+
+networks:
+  stack-nt:
+    name: ${STACK_NETWORK_DEFAULT}
+    external: true
+
+#ref
+# https://www.jenkins.io/doc/tutorials/build-a-java-app-with-maven/
+# https://github.com/jenkinsci/docker/blob/master/README.md
+# docker run --name myjenkins -p 8080:8080 -p 50000:50000 --env JAVA_OPTS="-Djava.util.logging.config.file=/var/jenkins_home/log.properties" -v `pwd`/data:/var/jenkins_home jenkins
+
+services:
+
+  srv:
+    image: ${STACK_SERVICE_IMAGE_URL}
+    hostname: "${STACK_SERVICE_HOSTNAME}"
+    ports:
+      - target: 50000
+        protocol: tcp
+    environment:
+      TZ: ${STACK_TZ}
+      JAVA_OPTS: -Djava.util.logging.config.file=/var/jenkins_home/log.properties
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${STORAGE_JENKINS}:/var/jenkins_home
+      - ${STACK_INFRA_CONF_DIR}/jenkins/log.properties:/var/jenkins_home/log.properties
+      # - ${STACK_INFRA_CONF_DIR}/jenkins/secrets/initialAdminPassword:/var/jenkins_home/secrets/initialAdminPassword
+      # - ${STACK_INFRA_CONF_DIR}/jenkins/ssh:/var/jenkins_home/.ssh
+      # - ${HOME}/.m2:/var/jenkins_home/.m2
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: any
+      labels:
+        - traefik.docker.network=${STACK_NETWORK_DEFAULT}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.entryPoints=http,https
+        - traefik.http.routers.${STACK_SERVICE_NAME}.tls=${STACK_TRAEFIK_TLS_ENABLED}
+        - traefik.http.routers.${STACK_SERVICE_NAME}.rule=HostRegexp(`{subdomain:${STACK_SERVICE_HOSTNAME_PROXY}.*}`)
+        - traefik.http.routers.${STACK_SERVICE_NAME}.service=${STACK_SERVICE_NAME}
+        - traefik.http.services.${STACK_SERVICE_NAME}.loadbalancer.server.port=50000
+      
+    networks:
+      - stack-nt
+
+  ssh-agent:
+    image: ${STACK_SERVICE_IMAGE_JENKINS_AGENT}
+    environment:
+      TZ: ${STACK_TZ}
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - ${APPLICATION_DEPLOY_NODE_TOOL}
+      resources:
+        limits:
+          cpus: "${APPLICATION_DEPLOY_CPU}"
+          memory: ${APPLICATION_DEPLOY_MEMORY}
+      restart_policy:
+        condition: any
+    networks:
+      - stack-nt
